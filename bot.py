@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, date, timedelta
 
 from telegram import Update
-from telegram.constants import MessageEntityType
+from telegram.constants import MessageEntityType, ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -84,7 +84,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Show 'typing...' action
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
         response = await generate_response(text)
-        await update.message.reply_text(response)
+        try:
+            await update.message.reply_text(response, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Failed to send HTML: {e}")
+            # Fallback to plain text if HTML parsing fails
+            await update.message.reply_text(response)
 
 def _add_user(db, tg_id, username, first_name):
     """Helper to add/update user in DB."""
