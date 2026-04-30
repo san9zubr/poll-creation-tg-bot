@@ -61,7 +61,7 @@ async def generate_response(user_message: str) -> str:
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-2.5-flash',
             tools=[update_meeting_status],
             system_instruction=get_system_prompt()
         )
