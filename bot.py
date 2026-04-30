@@ -35,9 +35,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
         
-    # 1. Silently track users
+    # 1. Handle users leaving
     db = SessionLocal()
     try:
+        if update.message.left_chat_member:
+            left_user = update.message.left_chat_member
+            user = db.query(User).filter(User.telegram_id == left_user.id).first()
+            if user:
+                user.is_active = False
+                db.commit()
+                logger.info(f"User {user.first_name} left chat, marked inactive.")
+            return
+
+        # 2. Silently track active users
         sender = update.message.from_user
         if sender and not sender.is_bot:
             _add_user(db, sender.id, sender.username, sender.first_name)
