@@ -78,3 +78,15 @@ def calculate_day_winner(poll_id: int, db) -> tuple[str, list[User], list[User]]
                     tied_users.append(user)
                     
         return winning_day_text, [], tied_users
+
+def get_missing_voters(poll_id: int, db) -> list[User]:
+    """Returns a list of active users who haven't voted in the specified poll."""
+    voted_user_ids = db.query(PollAnswer.user_id).filter(PollAnswer.poll_id == poll_id).all()
+    voted_user_ids = [uid[0] for uid in voted_user_ids]
+    
+    missing_users = db.query(User).filter(
+        User.is_active == True,
+        User.id.notin_(voted_user_ids)
+    ).all()
+    
+    return missing_users

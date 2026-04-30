@@ -15,7 +15,8 @@ from telegram.ext import (
 )
 
 from database import init_db, SessionLocal, User, Poll, PollAnswer, Meeting
-from utils import get_closest_weekday, calculate_day_winner
+from utils import get_closest_weekday, calculate_day_winner, get_missing_voters
+from ai import generate_response
 
 load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -29,32 +30,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def track_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Silently tracks anyone who sends a message, and anyone mentioned, to build the member list."""
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tracks users and triggers AI if mentioned."""
     if not update.message:
         return
-    
+        
+    # 1. Silently track users
     db = SessionLocal()
     try:
-        # 1. Track the sender
         sender = update.message.from_user
         if sender and not sender.is_bot:
             _add_user(db, sender.id, sender.username, sender.first_name)
 
-        # 2. Track mentioned users
         if update.message.entities:
             for entity in update.message.entities:
                 if entity.type == MessageEntityType.MENTION:
-                    # e.g., @username
                     username = update.message.text[entity.offset:entity.offset+entity.length].lstrip('@')
                     _add_user(db, None, username, None)
                 elif entity.type == MessageEntityType.TEXT_MENTION:
-                    # Text mention has a user object
                     user = entity.user
                     if not user.is_bot:
                         _add_user(db, user.id, user.username, user.first_name)
     finally:
         db.close()
+        
+    # 2. Check for AI Trigger
+    text = update.message.text
+    if not text:
+        return
+        
+    bot_username = context.bot.username
+    is_reply_to_bot = (
+        update.message.reply_to_message and 
+        update.message.reply_to_message.from_user.username == bot_username
+    )
+    is_mentioned = bot_username and f"@{bot_username}" in text
+    starts_with_bot = text.lower().startswith("бот")
+
+    if is_reply_to_bot or is_mentioned or starts_with_bot:
+        # Show 'typing...' action
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+        response = await generate_response(text)
+        await update.message.reply_text(response)
 
 def _add_user(db, tg_id, username, first_name):
     """Helper to add/update user in DB."""
@@ -116,6 +133,23 @@ async def send_tuesday_poll(context: ContextTypes.DEFAULT_TYPE):
     finally:
         db.close()
 
+async def send_vote_reminder(context: ContextTypes.DEFAULT_TYPE):
+    """Job to send a reminder to users who haven't voted yet."""
+    db = SessionLocal()
+    try:
+        open_polls = db.query(Poll).filter(Poll.is_closed == False).all()
+        for poll in open_polls:
+            missing = get_missing_voters(poll.id, db)
+            if missing:
+                tags = " ".join([f"@{u.username}" for u in missing if u.username])
+                if tags:
+                    await context.bot.send_message(
+                        chat_id=CHAT_ID, 
+                        text=f"Напоминалка проголосовать! Не забудьте оставить свой голос ☝️\n{tags}"
+                    )
+    finally:
+        db.close()
+
 async def send_thursday_poll(context: ContextTypes.DEFAULT_TYPE):
     """Job to send the time selection poll on Thursday based on Tuesday's winner."""
     db = SessionLocal()
@@ -133,11 +167,20 @@ async def send_thursday_poll(context: ContextTypes.DEFAULT_TYPE):
             winner_text, losers, tied_users = calculate_day_winner(tuesday_poll.id, db)
             winning_day_text = winner_text
             
-            # TODO: Send messages to losers / tied users to ask if they can flex
-            # Example: 
-            # if losers:
-            #     tags = " ".join([f"@{u.username}" for u in losers if u.username])
-            #     await context.bot.send_message(chat_id=CHAT_ID, text=f"Большинство за {winner_text}. {tags}, сможете прийти?")
+            if losers:
+                tags = " ".join([f"@{u.username}" for u in losers if u.username])
+                if tags:
+                    await context.bot.send_message(
+                        chat_id=CHAT_ID, 
+                        text=f"Большинство за {winner_text}. {tags}, сможете прийти?"
+                    )
+            elif tied_users:
+                tags = " ".join([f"@{u.username}" for u in tied_users if u.username])
+                if tags:
+                    await context.bot.send_message(
+                        chat_id=CHAT_ID, 
+                        text=f"У нас ничья ({winner_text})! {tags}, кто-то сможет перенести свои планы?"
+                    )
                 
             db.commit()
 
@@ -218,8 +261,8 @@ if __name__ == "__main__":
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(PollAnswerHandler(handle_poll_answer))
-    # Track any message to silently build the user DB
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_user))
+    # Track any message to silently build the user DB and handle AI
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
     # TODO: Add APScheduler jobs for the polls
     

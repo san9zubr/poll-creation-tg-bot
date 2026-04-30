@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database import Base, User, Poll, PollAnswer
-from utils import calculate_day_winner
+from utils import calculate_day_winner, get_missing_voters
 
 @pytest.fixture
 def db_session():
@@ -93,3 +93,22 @@ def test_calculate_day_winner_no_votes(db_session):
     assert winner_text == "Голосов нет"
     assert len(losers) == 0
     assert len(tied_users) == 0
+
+def test_get_missing_voters(db_session):
+    """Test that missing voters are correctly identified."""
+    user1 = User(id=1, telegram_id=101, username="alice", is_active=True)
+    user2 = User(id=2, telegram_id=102, username="bob", is_active=True)
+    user3 = User(id=3, telegram_id=103, username="charlie", is_active=False) # inactive
+    db_session.add_all([user1, user2, user3])
+    
+    poll = Poll(id=1, telegram_poll_id="poll_123", poll_type="choose_day", options="A,B")
+    db_session.add(poll)
+    
+    # Alice votes, Bob doesn't, Charlie is inactive
+    db_session.add(PollAnswer(poll_id=1, user_id=1, option_ids="0"))
+    db_session.commit()
+    
+    missing = get_missing_voters(1, db_session)
+    
+    assert len(missing) == 1
+    assert missing[0].username == "bob"
