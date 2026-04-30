@@ -20,8 +20,7 @@ An intelligent, persistent Telegram bot built to manage scheduling and act as an
    ```sh
    git clone git@github.com:san9zubr/poll-creation-tg-bot.git
    cd poll-creation-tg-bot
-   uv venv
-   uv pip install -r requirements.txt
+   uv sync
    ```
 
 2. **Configuration (`.env`):**
