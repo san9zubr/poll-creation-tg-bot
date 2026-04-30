@@ -1,0 +1,26 @@
+# Virtual environments
+.venv/
+.uv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.*
+
+# Database
+bot.db
+*.sqlite3
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
