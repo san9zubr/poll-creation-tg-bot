@@ -6,11 +6,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-api_key = os.environ.get("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
-
 # Define a tool for Gemini to update the meeting database
 def update_meeting_status(topic: str, date_str: str = None) -> str:
     """Updates the database to mark a topic as completed and logs the meeting.
@@ -59,10 +54,12 @@ def get_system_prompt() -> str:
 """
 
 async def generate_response(user_message: str) -> str:
-    if not os.environ.get("GEMINI_API_KEY"):
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
         return "Ключ GEMINI_API_KEY не настроен. ИИ недоступен."
         
     try:
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
             model_name='gemini-1.5-flash',
             tools=[update_meeting_status],

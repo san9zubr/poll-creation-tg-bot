@@ -1,7 +1,11 @@
 import os
+from dotenv import load_dotenv
+
+# Load env vars before importing any local modules that depend on them
+load_dotenv()
+
 import logging
 from datetime import datetime, date, timedelta
-from dotenv import load_dotenv
 
 from telegram import Update
 from telegram.constants import MessageEntityType
@@ -18,7 +22,6 @@ from database import init_db, SessionLocal, User, Poll, PollAnswer, Meeting
 from utils import get_closest_weekday, calculate_day_winner, get_missing_voters
 from ai import generate_response
 
-load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 if CHAT_ID:
